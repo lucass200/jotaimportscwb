@@ -11,7 +11,7 @@
    ============================================ */
 
 const CONFIG = {
-  AFFILIATE_ID: "SEU_AFFILIATE_ID",   // ← TROQUE AQUI
+  AFFILIATE_ID: "ii20240905142246",   // ← TROQUE AQUI
   SITE_ID: "MLB",                      // Brasil = MLB
   RESULTS_PER_PAGE: 48,
   PROXY: "https://api.allorigins.win/get?url=",
