@@ -4,21 +4,18 @@
 
    CONFIGURAÇÃO DE AFILIADO
    ========================
-   1. Acesse: https://www.mercadolivre.com.br/afiliados
-   2. Crie sua conta e aguarde aprovação
-   3. Substitua SEU_AFFILIATE_ID abaixo pelo seu ID real
-      Ex: "techofertas123"
+   Substitua SEU_AFFILIATE_ID pelo seu ID real.
+   Seu ID: ii20240905142246
    ============================================ */
 
 const CONFIG = {
-  AFFILIATE_ID: "ii20240905142246",   // ← TROQUE AQUI
-  SITE_ID: "MLB",                      // Brasil = MLB
+  AFFILIATE_ID: "ii20240905142246",  // ← Seu ID de afiliado
+  SITE_ID: "MLB",
   RESULTS_PER_PAGE: 48,
-  PROXY: "https://api.allorigins.win/get?url=",
 };
 
 // ============================================
-// ESTADO DA APLICAÇÃO
+// ESTADO
 // ============================================
 let state = {
   query: "eletronicos promocao",
@@ -29,10 +26,10 @@ let state = {
 };
 
 // ============================================
-// AFILIADO — gera link com tracking
+// AFILIADO
 // ============================================
 function addAffiliateLink(url) {
-  if (!url || CONFIG.AFFILIATE_ID === "SEU_AFFILIATE_ID") return url;
+  if (!url) return url;
   try {
     const u = new URL(url);
     u.searchParams.set("matt_tool", "afiliados");
@@ -45,35 +42,23 @@ function addAffiliateLink(url) {
 }
 
 // ============================================
-// API MERCADO LIVRE
+// API — chama a serverless function local
 // ============================================
 async function fetchML(query, sort = "relevance") {
-  const sortMap = {
-    relevance: "relevance",
-    price_asc: "price_asc",
-    price_desc: "price_desc",
-  };
+  const params = new URLSearchParams({
+    q: query,
+    sort,
+    limit: CONFIG.RESULTS_PER_PAGE,
+  });
 
-  const mlSort = sortMap[sort] || "relevance";
-  const endpoint = `https://api.mercadolibre.com/sites/${CONFIG.SITE_ID}/search?q=${encodeURIComponent(query)}&limit=${CONFIG.RESULTS_PER_PAGE}&sort=${mlSort}`;
-  const proxyUrl = CONFIG.PROXY + encodeURIComponent(endpoint);
+  const response = await fetch(`/api/search?${params}`);
 
-  // Tenta via proxy (evita CORS em produção)
-  try {
-    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
-    const outer = await res.json();
-    const data = JSON.parse(outer.contents);
-    return data.results || [];
-  } catch {
-    // Fallback: tenta direto (funciona dependendo do browser/host)
-    try {
-      const res2 = await fetch(endpoint, { signal: AbortSignal.timeout(8000) });
-      const data2 = await res2.json();
-      return data2.results || [];
-    } catch {
-      return null; // erro real
-    }
+  if (!response.ok) {
+    throw new Error(`Erro ${response.status}`);
   }
+
+  const data = await response.json();
+  return data.results || [];
 }
 
 // ============================================
@@ -99,7 +84,7 @@ function sortProdutos(produtos, sort) {
       return db - da;
     });
   }
-  return arr; // relevance (ordem original da API)
+  return arr;
 }
 
 function setUpdateTime() {
@@ -107,16 +92,6 @@ function setUpdateTime() {
   const h = now.getHours().toString().padStart(2, "0");
   const m = now.getMinutes().toString().padStart(2, "0");
   document.getElementById("updateTime").textContent = `Atualizado às ${h}:${m}`;
-}
-
-function updateStats(produtos) {
-  const total = produtos.length;
-  const withDiscount = produtos.filter(p => p.original_price && p.original_price > p.price).length;
-  const freeShipping = produtos.filter(p => p.shipping?.free_shipping).length;
-
-  animateCount("statTotal", total);
-  animateCount("statDiscount", withDiscount);
-  animateCount("statFree", freeShipping);
 }
 
 function animateCount(id, target) {
@@ -129,6 +104,12 @@ function animateCount(id, target) {
     el.textContent = current;
     if (current >= target) clearInterval(timer);
   }, 30);
+}
+
+function updateStats(produtos) {
+  animateCount("statTotal", produtos.length);
+  animateCount("statDiscount", produtos.filter(p => p.original_price && p.original_price > p.price).length);
+  animateCount("statFree", produtos.filter(p => p.shipping?.free_shipping).length);
 }
 
 // ============================================
@@ -147,8 +128,7 @@ function renderCard(item, index) {
 
   return `
     <a class="card" href="${link}" target="_blank" rel="noopener sponsored"
-       style="animation-delay:${delay}ms"
-       title="${item.title}">
+       style="animation-delay:${delay}ms" title="${item.title}">
       <div class="card-thumb">
         <img src="${imgSrc}" alt="${item.title}" loading="lazy"
              onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;height:100%;font-size:3rem;background:#1a1a2e\\'>📦</div>'" />
@@ -202,7 +182,6 @@ function renderGrid(produtos) {
 
   const sorted = sortProdutos(produtos, state.sort);
   grid.innerHTML = sorted.map((p, i) => renderCard(p, i)).join("");
-
   sortBar.style.display = "flex";
   resultCount.textContent = `${sorted.length} produtos encontrados`;
   updateStats(sorted);
@@ -210,25 +189,22 @@ function renderGrid(produtos) {
 }
 
 function showLoading(label) {
-  const grid = document.getElementById("grid");
-  const sortBar = document.getElementById("sortBar");
-  sortBar.style.display = "none";
-  grid.innerHTML = `
+  document.getElementById("sortBar").style.display = "none";
+  document.getElementById("grid").innerHTML = `
     <div class="loader-wrap">
       <div class="loader"></div>
       <p>Buscando ofertas em <strong>${label}</strong>…</p>
     </div>`;
 }
 
-function showError() {
-  const grid = document.getElementById("grid");
-  grid.innerHTML = `
+function showError(query, label) {
+  document.getElementById("grid").innerHTML = `
     <div class="empty-state">
       <span>⚠️</span>
       <strong>Não foi possível carregar os produtos</strong>
       <span>Verifique sua conexão e tente novamente</span>
       <button class="btn-comprar" style="margin-top:0.5rem"
-        onclick="loadProdutos(state.query, state.label)">
+        onclick="loadProdutos('${query}','${label}')">
         Tentar novamente
       </button>
     </div>`;
@@ -246,21 +222,20 @@ async function loadProdutos(query, label) {
 
   showLoading(label);
 
-  const results = await fetchML(query, state.sort);
-
-  state.loading = false;
-
-  if (results === null) {
-    showError();
-    return;
+  try {
+    const results = await fetchML(query, state.sort);
+    state.produtos = results;
+    renderGrid(results);
+  } catch (err) {
+    console.error(err);
+    showError(query, label);
+  } finally {
+    state.loading = false;
   }
-
-  state.produtos = results;
-  renderGrid(results);
 }
 
 // ============================================
-// EVENTOS — CHIPS DE CATEGORIA
+// EVENTOS
 // ============================================
 document.querySelectorAll(".chip").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -271,9 +246,6 @@ document.querySelectorAll(".chip").forEach(btn => {
   });
 });
 
-// ============================================
-// EVENTOS — BUSCA
-// ============================================
 document.getElementById("searchBtn").addEventListener("click", () => {
   const val = document.getElementById("searchInput").value.trim();
   if (!val) return;
@@ -285,20 +257,15 @@ document.getElementById("searchInput").addEventListener("keydown", e => {
   if (e.key === "Enter") document.getElementById("searchBtn").click();
 });
 
-// ============================================
-// EVENTOS — ORDENAÇÃO
-// ============================================
 document.querySelectorAll(".sort-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".sort-btn").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     state.sort = btn.dataset.sort;
 
-    if (state.sort === "relevance" || state.sort === "price_asc" || state.sort === "price_desc") {
-      // Re-busca da API com sort nativo
+    if (["relevance", "price_asc", "price_desc"].includes(state.sort)) {
       loadProdutos(state.query, state.label);
     } else {
-      // Ordena localmente (ex: maior desconto)
       renderGrid(state.produtos);
     }
   });
